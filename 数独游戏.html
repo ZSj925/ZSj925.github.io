@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数独 Sudoku</title>
+<style>
+  :root {
+    --bg: #eef1f6;
+    --card: #ffffff;
+    --text: #1f2a36;
+    --dim: #64748b;
+    --thin: #c3ced9;
+    --thick: #33415c;
+    --given: #16202e;
+    --user: #2563eb;
+    --wrong: #dc2626;
+    --note: #7c8ba1;
+    --sel: #d7e7ff;
+    --peer: #eef4fb;
+    --same: #c4daf5;
+    --hint: #059669;
+    --accent: #2f6fed;
+    --accent-soft: #e8f0fe;
+    --btn-bg: #ffffff;
+    --btn-border: #d3dce6;
+  }
+  html.dark {
+    --bg: #10151c;
+    --card: #182029;
+    --text: #e7edf5;
+    --dim: #8ba0b5;
+    --thin: #33414f;
+    --thick: #93a8bd;
+    --given: #f2f6fa;
+    --user: #6ea4ff;
+    --wrong: #ff6b6b;
+    --note: #7e93a9;
+    --sel: #24364d;
+    --peer: #1a2531;
+    --same: #2c415c;
+    --hint: #34d399;
+    --accent: #6ea4ff;
+    --accent-soft: #22334d;
+    --btn-bg: #1b242e;
+    --btn-border: #33414f;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh; background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 18px 12px 30px;
+  }
+  .app { width: 100%; max-width: 520px; }
+
+  header { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  header h1 { font-size: 20px; letter-spacing: .5px; }
+  .header-btns { display: flex; gap: 8px; }
+
+  .difficulties { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .difficulties button {
+    flex: 1; min-width: 64px; padding: 7px 10px; border-radius: 9px; font-size: 13.5px;
+    border: 1.5px solid var(--btn-border); background: var(--btn-bg); color: var(--text); cursor: pointer;
+    transition: all .15s;
+  }
+  .difficulties button.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+
+  .stats {
+    display: flex; gap: 16px; align-items: center; justify-content: center;
+    font-size: 13.5px; color: var(--dim); margin-bottom: 10px; font-variant-numeric: tabular-nums;
+  }
+  .stats b { color: var(--text); }
+
+  .board-wrap { display: flex; justify-content: center; }
+  .board {
+    display: grid; grid-template-columns: repeat(9, 1fr);
+    width: min(92vw, 480px); aspect-ratio: 1 / 1;
+    background: var(--card); border: 2.5px solid var(--thick); border-radius: 6px;
+    overflow: hidden; user-select: none; touch-action: manipulation;
+  }
+  .cell {
+    position: relative; display: flex; align-items: center; justify-content: center;
+    border-right: 1px solid var(--thin); border-bottom: 1px solid var(--thin);
+    cursor: pointer; background: var(--card);
+  }
+  .cell.br2, .cell.br5 { border-right: 2px solid var(--thick); }
+  .cell.bb2, .cell.bb5 { border-bottom: 2px solid var(--thick); }
+  .cell .val { font-size: min(6vw, 26px); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .cell.given .val { color: var(--given); }
+  .cell.user .val { color: var(--user); }
+  .cell.wrong .val { color: var(--wrong); }
+  .cell.hinted .val { color: var(--hint); }
+  .cell.peer { background: var(--peer); }
+  .cell.same { background: var(--same); }
+  .cell.selected { background: var(--sel); }
+  .cell.selected::after {
+    content: ""; position: absolute; inset: 1px; border: 2px solid var(--accent);
+    border-radius: 3px; pointer-events: none;
+  }
+  .cell.wrong { background: color-mix(in srgb, var(--wrong) 10%, var(--card)); }
+  .cell .notes {
+    display: none; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
+    width: 100%; height: 100%; padding: 2px;
+  }
+  .cell.has-notes .notes { display: grid; }
+  .cell.has-notes .val { display: none; }
+  .cell .notes span {
+    display: flex; align-items: center; justify-content: center;
+    font-size: min(2.6vw, 11px); color: var(--note); font-variant-numeric: tabular-nums; line-height: 1;
+  }
+
+  .numpad { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+  .digits { display: grid; grid-template-columns: repeat(9, 1fr); gap: 6px; }
+  .digits button, .tools button {
+    height: 48px; border-radius: 10px; border: 1.5px solid var(--btn-border);
+    background: var(--btn-bg); color: var(--text); font-size: 18px; font-weight: 600;
+    cursor: pointer; transition: all .12s; font-variant-numeric: tabular-nums;
+  }
+  .digits button:hover, .tools button:hover { border-color: var(--accent); color: var(--accent); }
+  .digits button:active, .tools button:active { transform: scale(.95); }
+  .tools { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .tools button { font-size: 13.5px; height: 42px; font-weight: 500; }
+  .tools button.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+
+  .footer { margin-top: 14px; font-size: 12px; color: var(--dim); text-align: center; line-height: 1.8; }
+
+  .btn {
+    padding: 8px 14px; border-radius: 9px; border: 1.5px solid var(--btn-border);
+    background: var(--btn-bg); color: var(--text); font-size: 13.5px; cursor: pointer; transition: all .15s;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+  .btn.primary:hover { filter: brightness(1.12); color: #fff; }
+
+  /* 生成中遮罩 */
+  #genOverlay {
+    position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    background: color-mix(in srgb, var(--bg) 75%, transparent); z-index: 60;
+  }
+  #genOverlay.show { display: flex; }
+  #genOverlay .spinner {
+    font-size: 15px; color: var(--text); padding: 14px 22px; border-radius: 12px;
+    background: var(--card); border: 1px solid var(--btn-border); box-shadow: 0 6px 20px rgba(0,0,0,.15);
+  }
+
+  /* 教程弹窗 */
+  #tutOverlay {
+    position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    background: rgba(10, 16, 24, .55); z-index: 55; backdrop-filter: blur(3px); padding: 16px;
+  }
+  #tutOverlay.show { display: flex; }
+  .tut-card {
+    background: var(--card); border-radius: 16px; width: 100%; max-width: 500px;
+    max-height: 86vh; display: flex; flex-direction: column; overflow: hidden;
+    box-shadow: 0 12px 40px rgba(0,0,0,.3); animation: pop .3s cubic-bezier(.2,1.4,.4,1);
+  }
+  .tut-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 15px 20px 11px; border-bottom: 1px solid var(--btn-border);
+  }
+  .tut-head h2 { font-size: 17px; }
+  .tut-close {
+    border: none; background: none; font-size: 19px; color: var(--dim);
+    cursor: pointer; padding: 4px 9px; border-radius: 8px; line-height: 1;
+  }
+  .tut-close:hover { color: var(--text); background: var(--peer); }
+  .tut-body { overflow-y: auto; padding: 12px 20px 16px; }
+  .tut-body h3 { font-size: 14.5px; margin: 14px 0 6px; }
+  .tut-body h3:first-child { margin-top: 2px; }
+  .tut-body p, .tut-body li { font-size: 13px; line-height: 1.75; }
+  .tut-body ul { padding-left: 18px; }
+  .tut-body li { margin: 3px 0; }
+  .tut-foot { padding: 12px 20px; border-top: 1px solid var(--btn-border); text-align: center; }
+  .tut-foot .btn { width: 100%; max-width: 240px; }
+  kbd {
+    display: inline-block; padding: 1px 6px; border: 1px solid var(--btn-border);
+    border-bottom-width: 2px; border-radius: 5px; font-size: 11.5px; background: var(--bg);
+    font-family: inherit; margin: 0 1px;
+  }
+
+  /* 教程演示：9×9 行/列/宫高亮 */
+  .demo-wrap { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start; margin: 8px 0 4px; }
+  .demo-grid {
+    display: grid; grid-template-columns: repeat(9, 22px); grid-template-rows: repeat(9, 22px);
+    border: 2px solid var(--thick); border-radius: 4px; overflow: hidden; width: max-content; flex: none;
+  }
+  .demo-grid .dc {
+    display: flex; align-items: center; justify-content: center; font-size: 11.5px;
+    border-right: 1px solid var(--thin); border-bottom: 1px solid var(--thin);
+    font-variant-numeric: tabular-nums; color: var(--dim);
+  }
+  .demo-grid .dc:nth-child(9n) { border-right: none; }
+  .demo-grid .dc:nth-child(n+73) { border-bottom: none; }
+  .demo-grid .dc.dg-row { background: color-mix(in srgb, #ef4444 18%, transparent); }
+  .demo-grid .dc.dg-col { background: color-mix(in srgb, #3b82f6 18%, transparent); }
+  .demo-grid .dc.dg-box { background: color-mix(in srgb, #10b981 18%, transparent); }
+  .demo-grid .dc.dg-hit { background: color-mix(in srgb, #f59e0b 55%, transparent); color: var(--text); font-weight: 700; }
+  .demo-legend { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--dim); margin-top: 4px; }
+  .demo-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+
+  /* 排除法示例：3×3 小宫 */
+  .mini-box {
+    display: grid; grid-template-columns: repeat(3, 32px); grid-template-rows: repeat(3, 32px);
+    border: 2px solid var(--thick); border-radius: 4px; overflow: hidden; width: max-content; margin: 8px 0;
+  }
+  .mini-box .mc {
+    display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 600;
+    border-right: 1px solid var(--thin); border-bottom: 1px solid var(--thin);
+  }
+  .mini-box .mc:nth-child(3n) { border-right: none; }
+  .mini-box .mc:nth-child(n+7) { border-bottom: none; }
+  .mini-box .mc.blank { background: var(--accent-soft); color: var(--accent); }
+
+  /* 胜利遮罩 */
+  #winOverlay {
+    position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    background: rgba(10, 16, 24, .55); z-index: 50; backdrop-filter: blur(3px);
+  }
+  #winOverlay.show { display: flex; }
+  .win-card {
+    background: var(--card); border-radius: 18px; padding: 30px 34px; text-align: center;
+    box-shadow: 0 12px 40px rgba(0,0,0,.3); animation: pop .35s cubic-bezier(.2,1.4,.4,1);
+  }
+  @keyframes pop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .win-card .emoji { font-size: 46px; animation: bounce 1s infinite; }
+  @keyframes bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+  .win-card h2 { font-size: 22px; margin: 8px 0 10px; }
+  .win-card p { font-size: 14px; color: var(--dim); margin-bottom: 16px; }
+  .win-card p b { color: var(--text); }
+
+  #confetti { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 51; }
+  .confetti-piece {
+    position: absolute; top: -20px; width: 9px; height: 15px; border-radius: 2px;
+    animation: fall linear forwards;
+  }
+  @keyframes fall { to { transform: translateY(105vh) rotate(720deg); } }
+
+  @media (max-width: 420px) {
+    .digits button { height: 42px; font-size: 16px; }
+    .tools button { height: 38px; font-size: 12.5px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>🎯 数独 Sudoku</h1>
+    <div class="header-btns">
+      <button id="btnTut" class="btn">📖 教程</button>
+      <button id="btnNew" class="btn primary">🔄 新游戏</button>
+      <button id="btnTheme" class="btn">🌙</button>
+    </div>
+  </header>
+
+  <div class="difficulties" id="difficulties">
+    <button data-d="easy">简单</button>
+    <button data-d="medium" class="active">中等</button>
+    <button data-d="hard">困难</button>
+    <button data-d="expert">专家</button>
+  </div>
+
+  <div class="stats">
+    <span>⏱️ <b id="timer">00:00</b></span>
+    <span>❌ <b id="mistakes">0</b></span>
+    <span>💡 <b id="hints">0</b></span>
+  </div>
+
+  <div class="board-wrap">
+    <div class="board" id="board"></div>
+  </div>
+
+  <div class="numpad">
+    <div class="digits" id="digits"></div>
+    <div class="tools">
+      <button id="btnNote">✏️ 笔记</button>
+      <button id="btnErase">🧽 擦除</button>
+      <button id="btnUndo">↩️ 撤销</button>
+      <button id="btnHint">💡 提示</button>
+    </div>
+  </div>
+
+  <p class="footer">
+    点击格子或用方向键移动 · 1–9 填数 · N 切换笔记 · 0 / Delete 擦除<br>
+    游戏进度自动保存在本机浏览器中
+  </p>
+</div>
+
+<div id="genOverlay"><div class="spinner">⏳ 正在出题…</div></div>
+
+<div id="tutOverlay">
+  <div class="tut-card">
+    <div class="tut-head">
+      <h2>📖 数独基础教程</h2>
+      <button class="tut-close" id="tutClose">✕</button>
+    </div>
+    <div class="tut-body">
+      <h3>🎯 目标</h3>
+      <p>在 9×9 棋盘的空格中填入 1–9，使<b>每一行、每一列、每一个 3×3 小宫</b>里的数字都不重复。</p>
+
+      <div class="demo-wrap">
+        <div class="demo-grid" id="tutDemoGrid"></div>
+        <div class="demo-legend">
+          <span><i style="background:#ef4444"></i>行：横着 9 格</span>
+          <span><i style="background:#3b82f6"></i>列：竖着 9 格</span>
+          <span><i style="background:#10b981"></i>宫：3×3 小方块</span>
+          <span><i style="background:#f59e0b"></i>交叉格：同时属于一行、一列、一宫</span>
+        </div>
+      </div>
+
+      <h3>📏 规则</h3>
+      <ul>
+        <li><b>黑字</b>是题目给出的数字，不能修改</li>
+        <li><b>蓝字</b>是你填入的数字，填错会<b>变红</b>并计入错误次数</li>
+        <li>没有空格、且所有数字都正确时通关</li>
+      </ul>
+
+      <h3>🔍 基础技巧：排除法</h3>
+      <div class="mini-box" id="tutMiniBox"></div>
+      <p>一个宫里已有 1–8，剩下的空格<b>只能填 9</b>；行、列同理。拿不准时用 <b>✏️ 笔记</b>把候选数记在格子里，逐个排除。</p>
+
+      <h3>🎮 操作速查</h3>
+      <ul>
+        <li>鼠标点击格子，或用 <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> 移动选中</li>
+        <li><kbd>1</kbd>–<kbd>9</kbd> 填数 · <kbd>N</kbd> 切换笔记 · <kbd>0</kbd> / <kbd>Delete</kbd> 擦除</li>
+        <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> 撤销 · 💡 提示会填入一个正确数字</li>
+        <li>进度自动保存在本机，关闭页面后重开可继续</li>
+      </ul>
+    </div>
+    <div class="tut-foot"><button id="tutDone" class="btn primary">🎮 开始游戏</button></div>
+  </div>
+</div>
+
+<div id="winOverlay">
+  <div class="win-card">
+    <div class="emoji">🎉</div>
+    <h2>恭喜完成！</h2>
+    <p>用时 <b id="winTime"></b> · 错误 <b id="winMistakes"></b> 次 · 提示 <b id="winHints"></b> 次</p>
+    <button id="btnReplay" class="btn primary">🎮 再来一局</button>
+  </div>
+</div>
+<div id="confetti"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ==================== 数独生成器 / 求解器 ====================
+  function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+  function shuffled(arr) {
+    var a = arr.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = randInt(0, i);
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+  function cloneGrid(g) { return g.map(function (r) { return r.slice(); }); }
+  function isEmptyGrid(g) { for (var r = 0; r < 9; r++) for (var c = 0; c < 9; c++) if (g[r][c]) return false; return true; }
+
+  function ok(g, r, c, n) {
+    for (var i = 0; i < 9; i++) {
+      if (g[r][i] === n || g[i][c] === n) return false;
+    }
+    var br = (r / 3 | 0) * 3, bc = (c / 3 | 0) * 3;
+    for (var x = br; x < br + 3; x++) for (var y = bc; y < bc + 3; y++) if (g[x][y] === n) return false;
+    return true;
+  }
+
+  // 随机回溯生成完整终盘
+  function makeSolution() {
+    var g = Array.from({ length: 9 }, function () { return Array(9).fill(0); });
+    function fill(idx) {
+      if (idx === 81) return true;
+      var r = idx / 9 | 0, c = idx % 9;
+      if (g[r][c]) return fill(idx + 1);
+      var nums = shuffled([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+      for (var k = 0; k < 9; k++) {
+        var n = nums[k];
+        if (ok(g, r, c, n)) {
+          g[r][c] = n;
+          if (fill(idx + 1)) return true;
+          g[r][c] = 0;
+        }
+      }
+      return false;
+    }
+    fill(0);
+    return g;
+  }
+
+  // 用 MRV 策略数解（最多数到 limit 个就停）
+  function countSolutions(grid, limit) {
+    var g = cloneGrid(grid);
+    var count = 0;
+    function search() {
+      if (count >= limit) return;
+      var bestR = -1, bestC = -1, bestCands = null;
+      for (var r = 0; r < 9; r++) {
+        for (var c = 0; c < 9; c++) {
+          if (g[r][c]) continue;
+          var cands = [];
+          for (var n = 1; n <= 9; n++) if (ok(g, r, c, n)) cands.push(n);
+          if (cands.length === 0) return;
+          if (!bestCands || cands.length < bestCands.length) {
+            bestR = r; bestC = c; bestCands = cands;
+            if (cands.length === 1) { r = 9; break; }
+          }
+        }
+      }
+      if (bestR === -1) { count++; return; }
+      for (var k = 0; k < bestCands.length; k++) {
+        g[bestR][bestC] = bestCands[k];
+        search();
+        g[bestR][bestC] = 0;
+        if (count >= limit) return;
+      }
+    }
+    search();
+    return count;
+  }
+
+  // 挖洞保证唯一解
+  function dig(solution, targetClues) {
+    var puzzle = cloneGrid(solution);
+    var positions = shuffled(Array.from({ length: 81 }, function (_, i) { return i; }));
+    var clues = 81;
+    for (var i = 0; i < positions.length; i++) {
+      if (clues <= targetClues) break;
+      var p = positions[i], r = p / 9 | 0, c = p % 9;
+      var backup = puzzle[r][c];
+      puzzle[r][c] = 0;
+      if (countSolutions(puzzle, 2) !== 1) puzzle[r][c] = backup;
+      else clues--;
+    }
+    return { puzzle: puzzle, clues: clues };
+  }
+
+  var DIFFICULTY = {
+    easy: { label: "简单", clues: 46 },
+    medium: { label: "中等", clues: 36 },
+    hard: { label: "困难", clues: 31 },
+    expert: { label: "专家", clues: 27 }
+  };
+
+  function generate(diffKey) {
+    var target = DIFFICULTY[diffKey].clues;
+    var best = null;
+    for (var attempt = 0; attempt < 6; attempt++) {
+      var sol = makeSolution();
+      var res = dig(sol, target);
+      if (res.clues <= target + 3) { best = { puzzle: res.puzzle, solution: sol, clues: res.clues }; break; }
+      if (!best || res.clues < best.clues) best = { puzzle: res.puzzle, solution: sol, clues: res.clues };
+    }
+    return best;
+  }
+
+  // ==================== 游戏状态 ====================
+  var SAVE_KEY = "sudoku_v1";
+  var game = null;            // {puzzle, solution, cells, notes, mistakes, hints, hinted, elapsed, difficulty, started, won}
+  var selected = null;        // [r, c]
+  var noteMode = false;
+  var undoStack = [];
+  var timerId = null;
+  var cellEls = [];           // 81 个 cell 的 DOM 引用
+
+  function blankState() {
+    return {
+      puzzle: Array.from({ length: 9 }, function () { return Array(9).fill(0); }),
+      solution: Array.from({ length: 9 }, function () { return Array(9).fill(0); }),
+      cells: Array.from({ length: 9 }, function () { return Array(9).fill(0); }),
+      notes: Array.from({ length: 9 }, function () { return Array(9).fill(0); }),
+      mistakes: 0, hints: 0, hinted: [], elapsed: 0,
+      difficulty: "medium", started: false, won: false
+    };
+  }
+
+  // ==================== DOM ====================
+  var boardEl = document.getElementById("board");
+  var timerEl = document.getElementById("timer");
+  var mistakesEl = document.getElementById("mistakes");
+  var hintsEl = document.getElementById("hints");
+  var noteBtn = document.getElementById("btnNote");
+  var winOverlay = document.getElementById("winOverlay");
+  var genOverlay = document.getElementById("genOverlay");
+  var tutOverlay = document.getElementById("tutOverlay");
+  var tutOpen = false;
+
+  function buildBoard() {
+    for (var i = 0; i < 81; i++) {
+      let r = i / 9 | 0, c = i % 9;
+      var cell = document.createElement("div");
+      cell.className = "cell";
+      if (c === 2 || c === 5) cell.classList.add(c === 2 ? "br2" : "br5");
+      if (r === 2 || r === 5) cell.classList.add(r === 2 ? "bb2" : "bb5");
+      var val = document.createElement("span");
+      val.className = "val";
+      var notes = document.createElement("div");
+      notes.className = "notes";
+      for (var n = 1; n <= 9; n++) {
+        var s = document.createElement("span");
+        s.dataset.n = n;
+        notes.appendChild(s);
+      }
+      cell.appendChild(val);
+      cell.appendChild(notes);
+      cell.addEventListener("click", function () {
+        selectCell(r, c);
+      });
+      boardEl.appendChild(cell);
+      cellEls.push({ el: cell, val: val, notes: notes, spans: notes.children, r: r, c: c });
+    }
+  }
+
+  function buildNumpad() {
+    var digits = document.getElementById("digits");
+    for (var n = 1; n <= 9; n++) {
+      (function (num) {
+        var b = document.createElement("button");
+        b.textContent = num;
+        b.addEventListener("click", function () { inputNumber(num); });
+        digits.appendChild(b);
+      })(n);
+    }
+  }
+
+  // ==================== 教程 ====================
+  function buildTutorialDemo() {
+    // 9×9 演示盘：高亮一行、一列、一宫及其交叉格
+    var grid = document.getElementById("tutDemoGrid");
+    for (var i = 0; i < 81; i++) {
+      var r = i / 9 | 0, c = i % 9;
+      var v = (r * 3 + (r / 3 | 0) + c) % 9 + 1; // 一张合法终盘
+      var cell = document.createElement("div");
+      cell.className = "dc";
+      cell.textContent = v;
+      if (r === 4) cell.classList.add("dg-row");
+      if (c === 2) cell.classList.add("dg-col");
+      if (r >= 3 && r <= 5 && c >= 0 && c <= 2) cell.classList.add("dg-box");
+      if (r === 4 && c === 2) cell.classList.add("dg-hit");
+      grid.appendChild(cell);
+    }
+    // 排除法示例：小宫已有 1–8，空位只能填 9
+    var box = document.getElementById("tutMiniBox");
+    for (var n = 1; n <= 9; n++) {
+      var m = document.createElement("div");
+      m.className = "mc" + (n === 9 ? " blank" : "");
+      m.textContent = n === 9 ? "?" : n;
+      box.appendChild(m);
+    }
+  }
+
+  function openTut() {
+    tutOverlay.classList.add("show");
+    tutOpen = true;
+  }
+  function closeTut() {
+    tutOverlay.classList.remove("show");
+    tutOpen = false;
+  }
+
+  // ==================== 渲染 ====================
+  function render() {
+    cellEls.forEach(function (ref) {
+      var r = ref.r, c = ref.c;
+      var v = game.cells[r][c];
+      var isGiven = game.puzzle[r][c] !== 0;
+      var isWrong = v !== 0 && !isGiven && v !== game.solution[r][c];
+      var isHinted = game.hinted.indexOf(r * 9 + c) !== -1;
+      var el = ref.el;
+
+      el.className = "cell";
+      if (c === 2 || c === 5) el.classList.add(c === 2 ? "br2" : "br5");
+      if (r === 2 || r === 5) el.classList.add(r === 2 ? "bb2" : "bb5");
+      if (v !== 0) el.classList.add(isGiven ? "given" : "user");
+      if (isWrong) el.classList.add("wrong");
+      if (isHinted) el.classList.add("hinted");
+
+      if (v !== 0) {
+        el.classList.remove("has-notes");
+        ref.val.textContent = v;
+      } else if (game.notes[r][c] !== 0) {
+        el.classList.add("has-notes");
+        for (var n = 1; n <= 9; n++) {
+          ref.spans[n - 1].textContent = (game.notes[r][c] & (1 << n)) ? n : "";
+        }
+      } else {
+        el.classList.remove("has-notes");
+        ref.val.textContent = "";
+      }
+
+      if (selected) {
+        var sr = selected[0], sc = selected[1];
+        var sameBox = (r / 3 | 0) === (sr / 3 | 0) && (c / 3 | 0) === (sc / 3 | 0);
+        var isPeer = r === sr || c === sc || sameBox;
+        var sv = game.cells[sr][sc];
+        var isSame = sv !== 0 && v === sv && v !== 0 && !(r === sr && c === sc);
+        if (r === sr && c === sc) el.classList.add("selected");
+        else if (isSame) el.classList.add("same");
+        else if (isPeer) el.classList.add("peer");
+      }
+    });
+
+    timerEl.textContent = fmtTime(game.elapsed);
+    mistakesEl.textContent = game.mistakes;
+    hintsEl.textContent = game.hints;
+    noteBtn.classList.toggle("active", noteMode);
+
+    document.querySelectorAll("#difficulties button").forEach(function (b) {
+      b.classList.toggle("active", b.dataset.d === game.difficulty);
+    });
+  }
+
+  function fmtTime(sec) {
+    var m = sec / 60 | 0, s = sec % 60;
+    return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+  }
+
+  // ==================== 操作 ====================
+  function snapshot() {
+    return {
+      cells: cloneGrid(game.cells),
+      notes: cloneGrid(game.notes),
+      mistakes: game.mistakes,
+      hinted: game.hinted.slice()
+    };
+  }
+  function restore(snap) {
+    game.cells = cloneGrid(snap.cells);
+    game.notes = cloneGrid(snap.notes);
+    game.mistakes = snap.mistakes;
+    game.hinted = snap.hinted.slice();
+  }
+  function pushUndo() {
+    undoStack.push(snapshot());
+    if (undoStack.length > 200) undoStack.shift();
+  }
+  function undo() {
+    if (!undoStack.length || game.won) return;
+    restore(undoStack.pop());
+    render();
+    save();
+  }
+
+  function selectCell(r, c) {
+    selected = [r, c];
+    render();
+  }
+
+  function markStarted() {
+    if (!game.started && !game.won) {
+      game.started = true;
+    }
+  }
+
+  function inputNumber(n) {
+    if (!selected || game.won) return;
+    var r = selected[0], c = selected[1];
+    if (game.puzzle[r][c] !== 0) return; // 固定格不可改
+    if (noteMode) {
+      markStarted();
+      pushUndo();
+      game.notes[r][c] ^= (1 << n);       // 切换候选
+      game.cells[r][c] = 0;
+      save();
+      render();
+      return;
+    }
+    if (game.cells[r][c] === n) return;
+    markStarted();
+    pushUndo();
+    game.cells[r][c] = n;
+    game.notes[r][c] = 0;
+    var hintIdx = game.hinted.indexOf(r * 9 + c);
+    if (hintIdx !== -1) game.hinted.splice(hintIdx, 1); // 手动改写过提示格后取消提示标记
+    if (n !== game.solution[r][c]) {
+      game.mistakes++;
+    } else {
+      removeConflictingNotes(r, c, n);
+    }
+    save();
+    render();
+    checkWin();
+  }
+
+  function removeConflictingNotes(r, c, n) {
+    // 填入正确数字后，清理同行/列/宫中的候选 n
+    for (var i = 0; i < 9; i++) {
+      game.notes[r][i] &= ~(1 << n);
+      game.notes[i][c] &= ~(1 << n);
+    }
+    var br = (r / 3 | 0) * 3, bc = (c / 3 | 0) * 3;
+    for (var x = br; x < br + 3; x++) for (var y = bc; y < bc + 3; y++) game.notes[x][y] &= ~(1 << n);
+  }
+
+  function eraseCell() {
+    if (!selected || game.won) return;
+    var r = selected[0], c = selected[1];
+    if (game.puzzle[r][c] !== 0) return;
+    if (game.cells[r][c] === 0 && game.notes[r][c] === 0) return;
+    markStarted();
+    pushUndo();
+    game.cells[r][c] = 0;
+    game.notes[r][c] = 0;
+    var hintIdx = game.hinted.indexOf(r * 9 + c);
+    if (hintIdx !== -1) game.hinted.splice(hintIdx, 1);
+    save();
+    render();
+  }
+
+  function useHint() {
+    if (game.won) return;
+    // 优先提示当前选中格，否则找第一个空格或错格
+    var targets = [];
+    if (selected) targets.push(selected);
+    for (var r = 0; r < 9; r++) for (var c = 0; c < 9; c++) {
+      if (game.puzzle[r][c] === 0 && game.cells[r][c] !== game.solution[r][c]) targets.push([r, c]);
+    }
+    if (!targets.length) return;
+    var t = targets[0], r = t[0], c = t[1];
+    markStarted();
+    pushUndo();
+    game.cells[r][c] = game.solution[r][c];
+    game.notes[r][c] = 0;
+    game.hinted.push(r * 9 + c);
+    game.hints++;
+    removeConflictingNotes(r, c, game.solution[r][c]);
+    save();
+    render();
+    checkWin();
+  }
+
+  function checkWin() {
+    for (var r = 0; r < 9; r++) for (var c = 0; c < 9; c++) {
+      if (game.cells[r][c] !== game.solution[r][c]) return;
+    }
+    game.won = true;
+    game.started = false;
+    save();
+    setTimeout(showWin, 250);
+  }
+
+  function showWin() {
+    document.getElementById("winTime").textContent = fmtTime(game.elapsed);
+    document.getElementById("winMistakes").textContent = game.mistakes;
+    document.getElementById("winHints").textContent = game.hints;
+    winOverlay.classList.add("show");
+    confetti();
+  }
+
+  function confetti() {
+    var box = document.getElementById("confetti");
+    box.innerHTML = "";
+    var colors = ["#f43f5e", "#f59e0b", "#10b981", "#3b82f6", "#8b5cf6", "#ec4899", "#facc15"];
+    for (var i = 0; i < 60; i++) {
+      var p = document.createElement("div");
+      p.className = "confetti-piece";
+      p.style.left = Math.random() * 100 + "vw";
+      p.style.background = colors[randInt(0, colors.length - 1)];
+      p.style.animationDuration = (2 + Math.random() * 2) + "s";
+      p.style.animationDelay = Math.random() * 0.8 + "s";
+      p.style.transform = "rotate(" + randInt(0, 360) + "deg)";
+      box.appendChild(p);
+    }
+    setTimeout(function () { box.innerHTML = ""; }, 5000);
+  }
+
+  // ==================== 新游戏 ====================
+  function newGame(diffKey) {
+    var diff = diffKey || game.difficulty;
+    genOverlay.classList.add("show");
+    setTimeout(function () {
+      var g = generate(diff);
+      game = blankState();
+      game.difficulty = diff;
+      game.puzzle = g.puzzle;
+      game.solution = g.solution;
+      game.cells = cloneGrid(g.puzzle);
+      undoStack = [];
+      selected = null;
+      save();
+      render();
+      genOverlay.classList.remove("show");
+    }, 60);
+  }
+
+  // ==================== 存档 ====================
+  function save() {
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify(game));
+    } catch (e) { /* 隐私模式等场景忽略 */ }
+  }
+  function load() {
+    try {
+      var raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return false;
+      var g = JSON.parse(raw);
+      if (!g || !g.puzzle || !g.solution) return false;
+      game = g;
+      undoStack = [];
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // ==================== 事件绑定 ====================
+  function bindEvents() {
+    document.getElementById("difficulties").addEventListener("click", function (e) {
+      var btn = e.target.closest("button");
+      if (!btn) return;
+      newGame(btn.dataset.d);
+    });
+
+    document.getElementById("btnNew").addEventListener("click", function () {
+      newGame(game.difficulty);
+    });
+    document.getElementById("btnReplay").addEventListener("click", function () {
+      winOverlay.classList.remove("show");
+      newGame(game.difficulty);
+    });
+
+    document.getElementById("btnNote").addEventListener("click", function () {
+      noteMode = !noteMode;
+      render();
+    });
+    document.getElementById("btnErase").addEventListener("click", eraseCell);
+    document.getElementById("btnUndo").addEventListener("click", undo);
+    document.getElementById("btnHint").addEventListener("click", useHint);
+
+    var dark = false;
+    document.getElementById("btnTheme").addEventListener("click", function () {
+      dark = !dark;
+      document.documentElement.classList.toggle("dark", dark);
+    });
+
+    document.getElementById("btnTut").addEventListener("click", openTut);
+    document.getElementById("tutClose").addEventListener("click", closeTut);
+    document.getElementById("tutDone").addEventListener("click", closeTut);
+    tutOverlay.addEventListener("click", function (e) {
+      if (e.target === tutOverlay) closeTut();
+    });
+
+    document.addEventListener("keydown", function (e) {
+      if (tutOpen) {
+        if (e.key === "Escape") { closeTut(); e.preventDefault(); }
+        return;
+      }
+      if (e.key >= "1" && e.key <= "9") { inputNumber(parseInt(e.key, 10)); e.preventDefault(); }
+      else if (e.key === "0" || e.key === "Backspace" || e.key === "Delete") { eraseCell(); e.preventDefault(); }
+      else if (e.key === "n" || e.key === "N") { noteMode = !noteMode; render(); }
+      else if (e.key === "z" && (e.ctrlKey || e.metaKey)) { undo(); e.preventDefault(); }
+      else if (e.key.startsWith("Arrow")) {
+        e.preventDefault();
+        if (!selected) { selected = [0, 0]; }
+        else {
+          var r = selected[0], c = selected[1];
+          if (e.key === "ArrowUp") r = Math.max(0, r - 1);
+          if (e.key === "ArrowDown") r = Math.min(8, r + 1);
+          if (e.key === "ArrowLeft") c = Math.max(0, c - 1);
+          if (e.key === "ArrowRight") c = Math.min(8, c + 1);
+          selected = [r, c];
+        }
+        render();
+      }
+    });
+
+    // 计时
+    timerId = setInterval(function () {
+      if (game && game.started && !game.won) {
+        game.elapsed++;
+        timerEl.textContent = fmtTime(game.elapsed);
+        save();
+      }
+    }, 1000);
+  }
+
+  // ==================== 启动 ====================
+  buildBoard();
+  buildNumpad();
+  buildTutorialDemo();
+  bindEvents();
+
+  if (load()) {
+    render();
+    if (game.won) showWin();
+  } else {
+    newGame("medium");
+  }
+})();
+</script>
+</body>
+</html>
